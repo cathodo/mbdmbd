@@ -24,6 +24,7 @@ from sklearn.preprocessing import StandardScaler
 # specialized datatypes
 import h5py
 import pysam
+import ast
 # plots
 from matplotlib import pyplot as plt
 import seaborn as sns
@@ -133,6 +134,7 @@ def make_kmer_table_bam(args, klen):
         bam = pysam.AlignmentFile(bamfile, 'rb', check_sq=False)
         for r in bam.fetch(until_eof=True):
             seq_all, sig_all = extract_bam_data(r)
+            rn = "read_" + str(r).split('\t')[0]
             seq_idx = [args.targetBase == b for b in seq_all]
             iw = np.where(seq_idx)[0]
             ## vector of individual kmer seq/sig pairs
