@@ -1,5 +1,6 @@
 name: mbdmbd
 channels:
+  - conda-forge
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=main
@@ -10,8 +11,8 @@ dependencies:
   - brotli=1.0.9=hf118e41_7
   - brotli-bin=1.0.9=hf118e41_7
   - brotlipy=0.7.0=py39h140841e_1003
-  - ca-certificates=2022.10.11=h6ffa863_0
-  - certifi=2022.9.24=py39h6ffa863_0
+  - ca-certificates=2022.9.24=h1084571_0
+  - certifi=2022.9.24=pyhd8ed1ab_0
   - cffi=1.15.1=py39h50e77d8_0
   - click=8.0.4=py39h6ffa863_0
   - cloudpickle=2.0.0=pyhd3eb1b0_0
@@ -34,6 +35,7 @@ dependencies:
   - joblib=1.1.1=py39h6ffa863_0
   - jpeg=9e=h140841e_0
   - kiwisolver=1.4.2=py39h29c3540_0
+  - kneed=0.7.0=pyh9f0ad1d_0
   - lcms2=2.12=h2045e0b_0
   - ld_impl_linux-ppc64le=2.38=hec883e6_1
   - lerc=3.0=h29c3540_0
@@ -102,4 +104,6 @@ dependencies:
   - zict=2.1.0=py39h6ffa863_0
   - zlib=1.2.13=hf118e41_0
   - zstd=1.5.2=hc52992f_0
+  - pip:
+    - pysam==0.20.0
 prefix: /home/liam/miniconda3/envs/mbdmbd
