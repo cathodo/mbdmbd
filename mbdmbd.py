@@ -152,7 +152,7 @@ def k_means_cluster_plot(X, plotPath, numClust):
 
 def build_kmer_table(filedir, bamstr, klen):
     all_bam_files = glob.glob(os.path.join(filedir, bamstr))
-    kmer_table_list = joblib.Parallel(n_jobs=10, verbose=10)(joblib.delayed(make_kmer_table_from_bamfile)(file_name,filedir,klen) for file_name in all_bam_files)
+    kmer_table_list = joblib.Parallel(n_jobs=50, verbose=10)(joblib.delayed(make_kmer_table_from_bamfile)(file_name,filedir,klen) for file_name in all_bam_files)
     kmer_table = pd.concat(kmer_table_list).reset_index()
     return kmer_table
 
