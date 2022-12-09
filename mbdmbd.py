@@ -5,6 +5,8 @@ import os
 import glob
 from argparse import ArgumentParser
 import math
+import joblib
+import time
 # dataframes
 import pandas as pd
 import numpy as np
@@ -56,7 +58,7 @@ def extract_f5_data(f, rn):
 def extract_f5_rawseq(f, rn):
     return f[rn]['Raw']['Signal'][...]
 
-def extract_bam_data(r):
+def extract_bam_data(r, filedir):
     read = str(r).split('\t')
     # for getting f5 raw sig
     read_name = "read_" + read[0]
@@ -69,7 +71,7 @@ def extract_bam_data(r):
     # number of signal ind to start at
     trimmed_samp = guppy_data[8][1]
     # filename for the f5 which corresponds to this
-    f5_fn = os.path.join(args.f5dirA, "workspace/fast5_pass", guppy_data[6][1])
+    f5_fn = os.path.join(filedir, "workspace/fast5_pass", guppy_data[6][1])
     f = h5py.File(f5_fn, 'r')
     full_sig = extract_f5_rawseq(f, read_name)
     # start and end for the fulllength seq
@@ -83,72 +85,39 @@ def extract_bam_data(r):
     sig = stride_sig[ss_ind]
     ## return seq, sig
     return read[9], sig
-    
 
-def make_kmer_table(args, klen):
-    ########################################
-    ############ iterate f5 file ###########
-    ########################################
-    ### decide f5
-    f5str = "fastq_pass/*_100.fast5" if args.test else "fastq_pass/*.fast5"
-    ### decide kmer or single base
-    negshift = math.floor(klen/2)
-    posshift = math.floor(klen/2)+1
-    ### iter
-    big_list = []
-    for f5file in tqdm(glob.glob(os.path.join(args.f5dirA,f5str))):
-        f = h5py.File(f5file, 'r')
-        for rn in f.keys():
-            seq_all, sig_all = extract_f5_data(f, rn)
-            seq_idx = [args.targetBase == b for b in seq_all]
-            iw = np.where(seq_idx)[0]
-            ## vector of individual kmer seq/sig pairs
-            seq = [seq_all[i-negshift:i+posshift] for i in iw]
-            sig = [sig_all[i-negshift:i+posshift] for i in iw]
-            # remove truncated
-            iw2 = np.where([len(s) == klen for s in seq])[0]
-            # check
-            if len(seq) == 0 | len(sig) == 0:
-                print("ACHTUN, ME VECTOR IS EMPTY")
-            if len(seq) != len(sig):
-                print("AVAST AND CURSES, ME VECTORS' LENGTHS ARE ASKEW")
-            # make serieses
-            big_list.append(pd.DataFrame([pd.Series(data={'signal':sig[i].flatten(),'kmer':seq[i],'read_name':rn,'seqloc':str(iw[i])}) for i in iw2]))
-    ##############################
-    kmer_table = pd.concat(big_list).reset_index()
-    del big_list, kmer_table['index']
-    return kmer_table
-
-def make_kmer_table_bam(args, klen):
+def make_kmer_table_from_bamfile(bamfile, filedir, klen):
     #########################
     ####### iter bams #######
     #########################
-    # decide bam
-    bamstr = "pass/*_100*.bam" if args.test else "pass/*.bam"
     # decide kmer or single base
     negshift = math.floor(klen/2)
     posshift = math.floor(klen/2)+1
     # iter
     big_list = []
-    for bamfile in tqdm(glob.glob(os.path.join(args.f5dirA, bamstr))):
-        bam = pysam.AlignmentFile(bamfile, 'rb', check_sq=False)
-        for r in bam.fetch(until_eof=True):
-            seq_all, sig_all = extract_bam_data(r)
-            rn = "read_" + str(r).split('\t')[0]
-            seq_idx = [args.targetBase == b for b in seq_all]
-            iw = np.where(seq_idx)[0]
-            ## vector of individual kmer seq/sig pairs
-            seq = [seq_all[i-negshift:i+posshift] for i in iw]
-            sig = [sig_all[i-negshift:i+posshift] for i in iw]
-            # remove truncated
-            iw2 = np.where([len(s) == klen for s in seq])[0]
-            # check
-            if len(seq) == 0 | len(sig) == 0:
-                print("ACHTUN, ME VECTOR IS EMPTY")
-            if len(seq) != len(sig):
-                print("AVAST AND CURSES, ME VECTORS' LENGTHS ARE ASKEW")
-            # make serieses
-            big_list.append(pd.DataFrame([pd.Series(data={'signal':sig[i].flatten(),'kmer':seq[i],'read_name':rn,'seqloc':str(iw[i])}) for i in iw2]))
+    ## this verbosity thing is to try and avoid the missing idx msg 
+    ## solution according to https://github.com/pysam-developers/pysam/issues/939#issuecomment-669016051
+    save = pysam.set_verbosity(0)
+    bam = pysam.AlignmentFile(bamfile, 'rb', check_sq=False)
+    pysam.set_verbosity(save)
+    for r in bam.fetch(until_eof=True):
+        ## just A for now 
+        seq_all, sig_all = extract_bam_data(r, filedir)
+        rn = "read_" + str(r).split('\t')[0]
+        seq_idx = [args.targetBase == b for b in seq_all]
+        iw = np.where(seq_idx)[0]
+        ## vector of individual kmer seq/sig pairs
+        seq = [seq_all[i-negshift:i+posshift] for i in iw]
+        sig = [sig_all[i-negshift:i+posshift] for i in iw]
+        # remove truncated
+        iw2 = np.where([len(s) == klen for s in seq])[0]
+        # check
+        if len(seq) == 0 | len(sig) == 0:
+            print("ACHTUN, ME VECTOR IS EMPTY")
+        if len(seq) != len(sig):
+            print("AVAST AND CURSES, ME VECTORS' LENGTHS ARE ASKEW")
+        # make serieses
+        big_list.append(pd.DataFrame([pd.Series(data={'signal':sig[i].flatten(),'kmer':seq[i],'read_name':rn,'seqloc':str(iw[i])}) for i in iw2]))
     ##############################
     kmer_table = pd.concat(big_list).reset_index()
     del big_list, kmer_table['index']
@@ -181,8 +150,15 @@ def k_means_cluster_plot(X, plotPath, numClust):
     plt.savefig(plotPath)
     return sse
 
+def build_kmer_table(filedir, bamstr, klen):
+    all_bam_files = glob.glob(os.path.join(filedir, bamstr))
+    kmer_table_list = joblib.Parallel(n_jobs=10, verbose=10)(joblib.delayed(make_kmer_table_from_bamfile)(file_name,filedir,klen) for file_name in all_bam_files)
+    kmer_table = pd.concat(kmer_table_list).reset_index()
+    return kmer_table
+
 #def main(argv=sys.argv):
 if True:
+    st = time.time()
     argv=sys.argv
     ###
     args = get_args(argv)
@@ -192,7 +168,10 @@ if True:
     if not os.path.exists(args.outDir):
         os.mkdir(args.outDir)
     ### load data
-    kmer_table = make_kmer_table_bam(args, 1)
+    # decide bam
+    bamstr = "pass/*_10*.bam" if args.test else "pass/*.bam"
+    kmer_table = build_kmer_table(args.f5dirA, bamstr, 5)
+    print("it's been {} seconds since you looked at me".format(time.time()-st))
     exit()
     ########################################
     ############### analysis ###############
@@ -202,13 +181,13 @@ if True:
     # The random_state parameter is set to an integer value so you can follow the data presented in the tutorial. 
     # In practice, it’s best to leave random_state as the default value, None.
     #kmer_subset = kmer_table[kmer_table['kmer']=='CGACG']
-    X = np.array([x for x in kmer_table['signal']])
+    X = np.array([x for x in kmer_table[kmer_table['kmer']=="CGACG"]['signal']])
     #
     k_attempt = 21
-    sse = k_means_cluster_plot(X, os.path.join(args.outDir, "test_clust.png"), k_attempt)
+    sse = k_means_cluster_plot(X, os.path.join(args.outDir, "test_CGACG_clust.png"), k_attempt)
     # find knee programmatically
     kneedle = KneeLocator(range(len(sse)), sse, S=1.0, curve='convex', direction='decreasing')
-    print(kneedle.knee)
+    print(args.targetBase, kneedle.knee)
     #
 if False:
     ### gmm ###
