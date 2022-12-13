@@ -70,8 +70,8 @@ def extract_bam_data(r, filedir):
     stride_len = move_table.pop(0)
     # number of signal ind to start at
     trimmed_samp = guppy_data[8][1]
-    # filename for the f5 which corresponds to this
-    f5_fn = os.path.join(filedir, "workspace/fast5_pass", guppy_data[6][1])
+    # filename for the f5 which corresponds to this (glob should never resolve > 1 file)
+    f5_fn = glob.glob(os.path.join(filedir, "workspace/fast5_*", guppy_data[6][1]))[0]
     f = h5py.File(f5_fn, 'r')
     full_sig = extract_f5_rawseq(f, read_name)
     # start and end for the fulllength seq
@@ -114,8 +114,10 @@ def make_kmer_table_from_bamfile(bamfile, filedir, klen):
         # check
         if len(seq) == 0 | len(sig) == 0:
             print("ACHTUN, ME VECTOR IS EMPTY")
+            continue
         if len(seq) != len(sig):
             print("AVAST AND CURSES, ME VECTORS' LENGTHS ARE ASKEW")
+            continue
         # make serieses
         big_list.append(pd.DataFrame([pd.Series(data={'signal':sig[i].flatten(),'kmer':seq[i],'read_name':rn,'seqloc':str(iw[i])}) for i in iw2]))
     ##############################
@@ -169,10 +171,12 @@ if True:
         os.mkdir(args.outDir)
     ### load data
     # decide bam
-    bamstr = "pass/*_10*.bam" if args.test else "pass/*.bam"
-    kmer_table = build_kmer_table(args.f5dirA, bamstr, 5)
-    print("it's been {} seconds since you looked at me".format(time.time()-st))
+    bamstr = "pass/*_11*.bam" if args.test else "pass/*.bam"
+    kmer_table = build_kmer_table(args.f5dirA, bamstr, 1)
+    print("it's been {} days since you looked at me".format((time.time()-st)/60/60/24))
+    X = np.array([x for x in kmer_table['signal']])
     exit()
+if False:
     ########################################
     ############### analysis ###############
     ########################################
@@ -181,25 +185,23 @@ if True:
     # The random_state parameter is set to an integer value so you can follow the data presented in the tutorial. 
     # In practice, it’s best to leave random_state as the default value, None.
     #kmer_subset = kmer_table[kmer_table['kmer']=='CGACG']
-    X = np.array([x for x in kmer_table[kmer_table['kmer']=="CGACG"]['signal']])
     #
     k_attempt = 21
-    sse = k_means_cluster_plot(X, os.path.join(args.outDir, "test_CGACG_clust.png"), k_attempt)
+    sse = k_means_cluster_plot(X, os.path.join(args.outDir, "test_big_clust.png"), k_attempt)
     # find knee programmatically
     kneedle = KneeLocator(range(len(sse)), sse, S=1.0, curve='convex', direction='decreasing')
     print(args.targetBase, kneedle.knee)
     #
-if False:
+if True:
     ### gmm ###
-    gmm = GaussianMixture(2, covariance_type='full', random_state=0).fit(X)
+    gmm = GaussianMixture(3, covariance_type='full', random_state=0).fit(X)
     #kmer_subset['predicted_clust'] = gmm.predict(X)
     #
     ### plot for sanity checking ###
     plotdata = pd.DataFrame(data={'signal_mean': np.mean(X, axis=1), 'cluster': gmm.predict(X)})
     plot = sns.violinplot(data = plotdata, x='cluster', y='signal_mean')
-    plot.set(ylim=(31.725, 32.0))
     fig = plot.get_figure()
-    fig.savefig(os.path.join(args.outDir, "test_CGACG.png"))
+    fig.savefig(os.path.join(args.outDir, "test_big_A.png"))
 
 #if __name__=="__main__":
 #    main(sys.argv)
