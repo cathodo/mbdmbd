@@ -103,14 +103,13 @@ def make_kmer_table_from_bamfile(bamfile, f5dir, klen):
     del big_list, kmer_table['index']
     return kmer_table
 
-
 def build_kmer_table(bamdir, f5dir, klen):
     all_bam_files = glob.glob(os.path.join(bamdir, "pass/*.bam"))
     kmer_table_list = joblib.Parallel(n_jobs=50, verbose=10)(joblib.delayed(make_kmer_table_from_bamfile)(file_name,f5dir,klen) for file_name in all_bam_files)
     kmer_table = pd.concat(kmer_table_list).reset_index()
     return kmer_table
 
-def main(argv=sys.argv):
+def get_kmer_table(argv=sys.argv):
     st = time.time()
     ### handle args
     args = get_args(argv)
@@ -119,8 +118,9 @@ def main(argv=sys.argv):
     ### load data
     kmer_table = build_kmer_table(args.bamdir, args.f5dir, args.ctlen)
     print("it's been {} days since you looked at me".format((time.time()-st)/60/60/24))
-    # to get raw signal do this
+    # NOTE to get raw signal do this:
     # X = np.array([x for x in kmer_table['signal']])
+    return kmer_table
 
 if __name__=="__main__":
-    main(sys.argv)
+    get_kmer_table(sys.argv)
