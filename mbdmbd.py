@@ -103,10 +103,10 @@ def make_kmer_table_from_bamfile(bamfile, f5dir, targetBase, klen, verbose):
     big_list = []
     ## this verbosity thing is to try and avoid the missing idx msg 
     ## solution according to https://github.com/pysam-developers/pysam/issues/939#issuecomment-669016051
-    if !verbose:
+    if not verbose:
         save = pysam.set_verbosity(0)
     bam = pysam.AlignmentFile(bamfile, 'rb', check_sq=False)
-    if !verbose:
+    if not verbose:
         pysam.set_verbosity(save)
     for r in bam.fetch(until_eof=True):
         ## get bam data
