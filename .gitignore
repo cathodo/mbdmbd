@@ -9,3 +9,9 @@
 # User-specific files
 .Ruserdata
 .Rproj.user
+
+# renv python integration
+__pycache__
+
+#editor exec
+micro
