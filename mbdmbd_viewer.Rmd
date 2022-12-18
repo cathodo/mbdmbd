@@ -1,0 +1,43 @@
+---
+title: "mbdmbd_viewer"
+author: "Liam R Mitchell"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library("reticulate")
+library("tidyverse")
+```
+
+# env setup
+## associate all the packages with Renv
+```{r renvInit, eval=FALSE}
+renv::init()
+```
+
+```{r renvPyConnection, eval=FALSE}
+# this PATH is the executable python from inside that
+pyPath <- "/home/liam/miniconda3/envs/mbdmbd/bin/python"
+renv::use_python(
+    name = pyPath, 
+    type = "conda")
+```
+
+```{python}
+import imp
+import mbdmbd
+imp.reload(mbdmbd)
+# args
+bamdir="/storage/liam/rebasecall/p48_anti-adar_guppy6.4"
+fdir="/data/nanopore/data/p48-51_20210210_Adar-Abeta-Aza_R1_SQK_RNA002_HT22/P48_Anti-adar/20210210_2130_1-A1-D1_PAE86248_66c1fc9e/"
+
+arg = ['mbdmbd.py','--bamdir',bamdir,'--fdir',fdir]
+
+kmer_table = mbdmbd.get_kmer_table(arg)
+```
+
+
+

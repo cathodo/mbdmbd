@@ -1,0 +1,17 @@
+{
+  "R": {
+    "Version": "4.1.2",
+    "Repositories": [
+      {
+        "Name": "CRAN",
+        "URL": "https://cloud.r-project.org"
+      }
+    ]
+  },
+  "Python": {
+    "Version": "3.10.8",
+    "Type": "conda",
+    "Name": "/home/liam/miniconda3/envs/mbdmbd/bin/python"
+  },
+  "Packages": []
+}
