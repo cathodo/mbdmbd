@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library("reticulate")
 library("tidyverse")
+library("lubridate")
 ```
 
 # env setup
@@ -18,7 +19,7 @@ library("tidyverse")
 renv::init()
 ```
 
-```{r renvPyConnection, eval=FALSE}
+```{r renvPyConnection}
 # this PATH is the executable python from inside that
 pyPath <- "/home/liam/miniconda3/envs/mbdmbd/bin/python"
 renv::use_python(
@@ -39,5 +40,20 @@ arg = ['mbdmbd.py','--bamdir',bamdir,'--fdir',fdir]
 kmer_table = mbdmbd.get_kmer_table(arg)
 ```
 
+```{r pyRhandoff}
+kmer_table <- reticulate::py$kmer_table
+```
 
+```{r plots}
+plotdata <- kmer_table %>% 
+  mutate(sig_mean = lapply(signal, mean)) %>% 
+  mutate(sig_mean = unlist(sig_mean)) %>% 
+  mutate(start_time = ymd_hms(start_time)) %>% 
+  mutate(hour = hour(start_time) + minute(start_time)/60)
 
+p <- ggplot(plotdata, aes(x = hour, y = sig_mean)) +
+  geom_point() + 
+  geom_smooth(method = "lm", formula = y~x)
+
+plot(p)
+```
