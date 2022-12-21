@@ -27,7 +27,7 @@ def get_args(argv):
     # optional
     optional_args.add_argument('--verbose', dest='verbose', action='store_true', help='call this to make program loud')
     optional_args.add_argument('--targetbase', dest='targetBase', default='A', help='you can change which base is in the middle of NN.NN kmer motifs that we compare, default A')
-    optional_args.add_argument('--contextlen', dest='ctlen', default=1, type=int, help='total size of base context, 5 for 5mer, etc, default 1')
+    optional_args.add_argument('--contextlen', dest='ctlen', default=5, type=int, help='total size of base context, 5 for 5mer, 1 for single base, default 5')
     ##########
     parser._action_groups.append(optional_args)
     parser.set_defaults()
@@ -47,34 +47,38 @@ def extract_bam_data(r, f5dir):
     ######################################################
     ############# PARSE the added fields #################
     ######################################################
-    for g in guppy_data:
-        code = g[0]
-        value = g[1]
-        # see https://github.com/nanoporetech/bonito/blob/master/documentation/SAM.md#read-tags
-        if code == "mv":
-            # indices of signal array which correspond to read (number of 1's = read len)
-            move_table = value[1]
-            # length of each signal segment per base
-            stride_len = move_table.pop(0)
-        elif code == "ts":
-            # number of signal ind to start at
-            trimmed_samp = value
-        elif code == "f5":
-            # filename for the f5 which corresponds to this (glob should never resolve > 1 file)
-            f5_fn = glob.glob(os.path.join(f5dir, "fast5_*", value))[0]
-        elif code == "sv":
-            # make sure it's the scaling we expect
-            if value != "med_mad":
-                print("Warning: unexpected scaling version, data scaling may not make sense")
-        elif code == "sm":
-            # scaling midpoint
-            scale_mid = value
-        elif code == "sd":
-            scale_dis = value
-        elif code == "st":
-            start_time = value
-        else:
-            continue
+    ###### see https://github.com/nanoporetech/bonito/blob/master/documentation/SAM.md#read-tags
+    #####################
+    ### guppy indices ###
+    #####################
+    # structure is list of tuples, guppy_data[N] = (key, value)
+    # since we want value, we do guppy_data[N][1] mostly
+    # move table needs another [1] for some reason
+    # list of ind:
+    # 0 mv
+    # 1 qs
+    # 2 mx
+    # 3 ch
+    # 4 rn
+    # 5 st
+    # 6 f5
+    # 7 ns
+    # 8 ts
+    # 9 sm
+    # 10 sd
+    # 11 sv
+    # 12 RG
+    ######### CORE EXTRACTION #########
+    # indices of signal array which correspond to read (number of 1's = read len)
+    move_table = guppy_data[0][1][1]
+    # length of each signal segment per base
+    stride_len = move_table.pop(0)
+    # number of signal ind to start at
+    trimmed_samp = guppy_data[8][1]
+    # filename for the f5 which corresponds to this (glob should never resolve > 1 file)
+    f5_fn = glob.glob(os.path.join(f5dir, "fast5_*", guppy_data[6][1]))[0]
+    ####### optional exraction ########
+    start_time = guppy_data[5]
     #####################################################
     ########### reshape data into sig + seq #############
     #####################################################
@@ -89,8 +93,9 @@ def extract_bam_data(r, f5dir):
     # get indices of move table
     ss_ind = np.where([b==1 for b in move_table])[0]
     sig = stride_sig[ss_ind]
-    # output
-    return seq, sig, scale_mid, scale_dis, start_time
+    #####################################################
+    # output, return optional as needed
+    return seq, sig, start_time
 
 def make_kmer_table_from_bamfile(bamfile, f5dir, targetBase, klen, verbose):
     #########################
@@ -110,7 +115,7 @@ def make_kmer_table_from_bamfile(bamfile, f5dir, targetBase, klen, verbose):
         pysam.set_verbosity(save)
     for r in bam.fetch(until_eof=True):
         ## get bam data
-        seq_all, sig_all, sm, sd, st = extract_bam_data(r, f5dir)
+        seq_all, sig_all, st = extract_bam_data(r, f5dir)
         ## handle bam data
         rn = "read_" + str(r).split('\t')[0]
         seq_idx = [targetBase == b for b in seq_all]
@@ -135,8 +140,6 @@ def make_kmer_table_from_bamfile(bamfile, f5dir, targetBase, klen, verbose):
             'kmer':seq[i],
             'read_name':rn,
             'seqloc':str(iw[i]),
-            'scale_mid':sm,
-            'scale_dis':sd,
             'start_time':st
             }) for i in iw2]))
     ##############################

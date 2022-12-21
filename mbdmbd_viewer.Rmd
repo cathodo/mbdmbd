@@ -32,8 +32,10 @@ import imp
 import mbdmbd
 imp.reload(mbdmbd)
 # args
-bamdir="/storage/liam/rebasecall/p48_anti-adar_guppy6.4"
-fdir="/data/nanopore/data/p48-51_20210210_Adar-Abeta-Aza_R1_SQK_RNA002_HT22/P48_Anti-adar/20210210_2130_1-A1-D1_PAE86248_66c1fc9e/"
+#bamdir="/storage/liam/rebasecall/p48_anti-adar_guppy6.4"
+#fdir="/data/nanopore/data/p48-51_20210210_Adar-Abeta-Aza_R1_SQK_RNA002_HT22/P48_Anti-adar/20210210_2130_1-A1-D1_PAE86248_66c1fc9e/"
+bamdir="/storage/liam/rebasecall/p50_Scramble_Si_guppy6.4"
+fdir="/data/nanopore/data/p48-51_20210210_Adar-Abeta-Aza_R1_SQK_RNA002_HT22/P50_Scramble-Si/20210210_2130_1-E9-H9_PAE86613_180257c4/"
 
 arg = ['mbdmbd.py','--bamdir',bamdir,'--fdir',fdir]
 
@@ -49,11 +51,17 @@ plotdata <- kmer_table %>%
   mutate(sig_mean = lapply(signal, mean)) %>% 
   mutate(sig_mean = unlist(sig_mean)) %>% 
   mutate(start_time = ymd_hms(start_time)) %>% 
-  mutate(hour = hour(start_time) + minute(start_time)/60)
+  mutate(hour = hour(start_time) + minute(start_time)/60) %>% 
+  mutate(scalefactor = (0-scale_mid)/(1-scale_dis))
 
-p <- ggplot(plotdata, aes(x = hour, y = sig_mean)) +
+p <- ggplot(plotdata, aes(x = hour, y = scalefactor)) +
   geom_point() + 
   geom_smooth(method = "lm", formula = y~x)
 
 plot(p)
 ```
+
+```{r}
+
+```
+
