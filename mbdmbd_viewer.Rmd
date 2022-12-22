@@ -11,6 +11,9 @@ knitr::opts_chunk$set(echo = TRUE)
 library("reticulate")
 library("tidyverse")
 library("lubridate")
+library("fpc")
+library("factoextra")
+library("cluster")
 ```
 
 # env setup
@@ -48,20 +51,29 @@ kmer_table <- reticulate::py$kmer_table
 
 ```{r plots}
 plotdata <- kmer_table %>% 
-  mutate(sig_mean = lapply(signal, mean)) %>% 
-  mutate(sig_mean = unlist(sig_mean)) %>% 
+  filter(kmer == "TGACG") %>% 
+  mutate(sig_mean = lapply(signal, mean),
+         sig_sd = lapply(signal, sd)) %>%
+  mutate(sig_mean = unlist(sig_mean),
+         sig_sd = unlist(sig_sd)) %>%
   mutate(start_time = ymd_hms(start_time)) %>% 
-  mutate(hour = hour(start_time) + minute(start_time)/60) %>% 
-  mutate(scalefactor = (0-scale_mid)/(1-scale_dis))
+  mutate(hour = hour(start_time) + minute(start_time)/60)
 
-p <- ggplot(plotdata, aes(x = hour, y = scalefactor)) +
-  geom_point() + 
-  geom_smooth(method = "lm", formula = y~x)
+p <- ggplot(plotdata, aes(x = sig_mean)) +
+  geom_histogram() + 
+  facet_grid(cols = vars(kmer))
 
 plot(p)
 ```
 
-```{r}
+```{r mixturemodel}
+clusterdata <- kmer_table %>% 
+  filter(kmer == "TGACG") 
+
+signal_matrix <- as.data.frame(lapply(cbind(transpose(clusterdata$signal)), unlist), col.names = 1:50)
+
+set.seed(220)
+fviz_nbclust(signal_matrix, kmeans, method = "wss")
 
 ```
 

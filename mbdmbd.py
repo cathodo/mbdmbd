@@ -78,7 +78,7 @@ def extract_bam_data(r, f5dir):
     # filename for the f5 which corresponds to this (glob should never resolve > 1 file)
     f5_fn = glob.glob(os.path.join(f5dir, "fast5_*", guppy_data[6][1]))[0]
     ####### optional exraction ########
-    start_time = guppy_data[5]
+    start_time = guppy_data[5][1]
     #####################################################
     ########### reshape data into sig + seq #############
     #####################################################
