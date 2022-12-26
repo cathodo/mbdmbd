@@ -10,15 +10,15 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library("reticulate")
 library("tidyverse")
+library("ggpubr")
 library("lubridate")
-library("fpc")
-library("factoextra")
-library("cluster")
+library("mclust")
 ```
 
 # env setup
 ## associate all the packages with Renv
 ```{r renvInit, eval=FALSE}
+### RUN THIS WHEN YOU NEED TO CREATE/RECREATE PY ENV
 renv::init()
 ```
 
@@ -32,48 +32,62 @@ renv::use_python(
 
 ```{python}
 import imp
+import xpore_readnames
+imp.reload(xpore_readnames)
 import mbdmbd
 imp.reload(mbdmbd)
-# args
-#bamdir="/storage/liam/rebasecall/p48_anti-adar_guppy6.4"
-#fdir="/data/nanopore/data/p48-51_20210210_Adar-Abeta-Aza_R1_SQK_RNA002_HT22/P48_Anti-adar/20210210_2130_1-A1-D1_PAE86248_66c1fc9e/"
-bamdir="/storage/liam/rebasecall/p50_Scramble_Si_guppy6.4"
-fdir="/data/nanopore/data/p48-51_20210210_Adar-Abeta-Aza_R1_SQK_RNA002_HT22/P50_Scramble-Si/20210210_2130_1-E9-H9_PAE86613_180257c4/"
 
-arg = ['mbdmbd.py','--bamdir',bamdir,'--fdir',fdir]
+######## args for everything #########
+xpath="/work/liam/nfruns/ADARknockdowncomparison/onB2/xpipor-pipe-pore/output/comparisons/mouse-antiadar-scramble/majority_direction_kmer_diffmod.table"
+adir="/work/liam/nfruns/ADARknockdowncomparison/onB2/xpipor-pipe-pore/output/mouse_antiadar"
+bdir="/work/liam/nfruns/ADARknockdowncomparison/onB2/xpipor-pipe-pore/output/mouse_scramble"
+# compile args
+arg_xporern = ["xpore_readnames.py","--xpore_table",xpath,"--sampleA_dir",adir,"--sampleB_dir",bdir]
 
-kmer_table = mbdmbd.get_kmer_table(arg)
+### unmodified sample
+bamdirA="/storage/common/rebasecall/p48_anti-adar_guppy6.4"
+fdirA="/data/nanopore/data/p48-51_20210210_Adar-Abeta-Aza_R1_SQK_RNA002_HT22/P48_Anti-adar/20210210_2130_1-A1-D1_PAE86248_66c1fc9e/"
+## modified sample
+bamdirB="/storage/common/rebasecall/p50_Scramble_Si_guppy6.4"
+fdirB="/data/nanopore/data/p48-51_20210210_Adar-Abeta-Aza_R1_SQK_RNA002_HT22/P50_Scramble-Si/20210210_2130_1-E9-H9_PAE86613_180257c4/"
+# compile args
+arg_kmertab_unmod = ['mbdmbd.py','--bamdir',bamdirA,'--fdir',fdirA]
+arg_kmertab_mod = ['mbdmbd.py','--bamdir',bamdirB,'--fdir',fdirB]
+
+########### run #############
+xporereadnames = xpore_readnames.get_xpore_readnames(arg_xporern)
+kmer_table_mod = mbdmbd.get_kmer_table_coord(xporereadnames, arg_kmertab_mod)
+kmer_table_unmod = mbdmbd.get_kmer_table_coord(xporereadnames, arg_kmertab_unmod)
 ```
 
 ```{r pyRhandoff}
-kmer_table <- reticulate::py$kmer_table
+kmer_table <- rbind(
+  reticulate::py$kmer_table_mod %>% 
+    mutate(origin="mod"),
+  reticulate::py$kmer_table_unmod %>% 
+    mutate(origin="unmod")
+)
 ```
 
-```{r plots}
-plotdata <- kmer_table %>% 
-  filter(kmer == "TGACG") %>% 
-  mutate(sig_mean = lapply(signal, mean),
-         sig_sd = lapply(signal, sd)) %>%
-  mutate(sig_mean = unlist(sig_mean),
-         sig_sd = unlist(sig_sd)) %>%
-  mutate(start_time = ymd_hms(start_time)) %>% 
-  mutate(hour = hour(start_time) + minute(start_time)/60)
+```{r clustering}
+kmer_nclust_vals <- function(kmer_table, KMER) {
+  clusterdata <- kmer_table %>% 
+    filter(kmer == KMER)
+  # extract raw signal
+  signal_matrix <- as.data.frame(lapply(cbind(transpose(clusterdata$signal)), unlist), col.names = 1:50)
+  # get BIC clustering
+  mickey_ds <- Mclust(signal_matrix)
+  
+  return(length(unique(mickey_ds$classification)))
+}
 
-p <- ggplot(plotdata, aes(x = sig_mean)) +
-  geom_histogram() + 
-  facet_grid(cols = vars(kmer))
-
-plot(p)
+for(i in unique(kmer_table$kmer)) {
+  nclust <- kmer_nclust_vals(kmer_table, i)
+  print(paste(i, nclust))
+}
 ```
 
-```{r mixturemodel}
-clusterdata <- kmer_table %>% 
-  filter(kmer == "TGACG") 
-
-signal_matrix <- as.data.frame(lapply(cbind(transpose(clusterdata$signal)), unlist), col.names = 1:50)
-
-set.seed(220)
-fviz_nbclust(signal_matrix, kmeans, method = "wss")
+```{r}
 
 ```
 

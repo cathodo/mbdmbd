@@ -12,6 +12,7 @@
 
 # renv python integration
 __pycache__
+renv.lock
 
 #editor exec
 micro

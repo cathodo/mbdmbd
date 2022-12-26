@@ -117,7 +117,7 @@ def make_kmer_table_from_bamfile(bamfile, f5dir, targetBase, klen, verbose):
         ## get bam data
         seq_all, sig_all, st = extract_bam_data(r, f5dir)
         ## handle bam data
-        rn = "read_" + str(r).split('\t')[0]
+        rn = "read_" + r.qname
         seq_idx = [targetBase == b for b in seq_all]
         iw = np.where(seq_idx)[0]
         ## vector of individual kmer seq/sig pairs
@@ -147,6 +147,91 @@ def make_kmer_table_from_bamfile(bamfile, f5dir, targetBase, klen, verbose):
     del big_list, kmer_table['index']
     return kmer_table
 
+def check_kmer(x, seq_all):
+    k = x['kmer'] 
+    s = int(x['move_start'])
+    e = int(x['move_end'])
+    k2 = seq_all[s:e]
+    if k == k2:
+        return True
+    else:
+        return False
+
+def get_signal(x, sig_all):
+    s = int(x['move_start'])
+    e = int(x['move_end'])
+    return sig_all[s:e]
+
+def make_kmer_table_from_coordinates(bamfile, f5dir, readinfo, verbose):
+    #########################
+    ####### iter bams #######
+    #########################
+    unique_reads = list(readinfo['read_name'].drop_duplicates())
+    # coord data preset kmer size
+    negshift = 2
+    posshift = 3
+    # iter
+    big_list = []
+    ## this verbosity thing is to try and avoid the missing idx msg 
+    ## solution according to https://github.com/pysam-developers/pysam/issues/939#issuecomment-669016051
+    if not verbose:
+        save = pysam.set_verbosity(0)
+    bam = pysam.AlignmentFile(bamfile, 'rb', check_sq=False)
+    if not verbose:
+        pysam.set_verbosity(save)
+    # check if any reads match
+    any_match = False
+    for r in bam.fetch(until_eof=True):
+        if r.qname in unique_reads:
+            any_match = True
+            ## get bam data
+            seq_all, sig_all, st = extract_bam_data(r, f5dir)
+            ## handle bam data
+            rn = "read_" + r.qname
+            ##### check kmer match
+            readmatch = readinfo[readinfo['read_name']==r.qname]
+            matchidx = readmatch.apply(lambda x: check_kmer(x, seq_all), axis=1)
+            readhits = readmatch[matchidx].reset_index()
+            if len(readhits) == 0:
+                # continue skips this iter if none of the kmers match
+                continue
+            readhits.insert(len(readhits.columns), "signal", readhits.apply(lambda x: get_signal(x, sig_all), axis=1))
+            # make serieses
+            big_list.append(pd.DataFrame([pd.Series(data={
+                'signal':readhits.loc[i]['signal'].flatten(),
+                'kmer':readhits.loc[i]['kmer'],
+                'read_name':rn,
+                'seqloc':str(readhits.loc[i]['move_start']),
+                'start_time':st
+                }) for i in range(len(readhits))]))
+    ##############################
+    # big list is empty in bamfile misses
+    if any_match:
+        kmer_table = pd.concat(big_list).reset_index()
+        del big_list, kmer_table['index']
+        return kmer_table
+
+def get_kmer_table_coord(readinfo, argv=sys.argv):
+    st = time.time()
+    ### handle args
+    args = get_args(argv)
+    # set bars verbosity
+    tqdm.pandas(disable = not args.verbose)
+    ### load data
+    all_bam_files = glob.glob(os.path.join(args.bamdir, "pass/*.bam"))
+    kmer_table_list = joblib.Parallel(n_jobs=50, verbose=10)(
+        joblib.delayed(make_kmer_table_from_coordinates)
+            (file_name,
+            args.f5dir,
+            readinfo,
+            args.verbose) for file_name in all_bam_files
+    )
+    kmer_table = pd.concat(kmer_table_list).reset_index()
+    print("it's been {} days since you looked at me".format((time.time()-st)/60/60/24))
+    # NOTE to get raw signal do this:
+    # X = np.array([x for x in kmer_table['signal']])
+    return kmer_table
+
 def build_kmer_table(args):
     all_bam_files = glob.glob(os.path.join(args.bamdir, "pass/*.bam"))
     kmer_table_list = joblib.Parallel(n_jobs=50, verbose=10)(
@@ -174,4 +259,4 @@ def get_kmer_table(argv=sys.argv):
     return kmer_table
 
 if __name__=="__main__":
-    kmer_table = get_kmer_table(sys.argv)
+    kmer_table = get_kmer_table()
