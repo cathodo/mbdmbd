@@ -16,3 +16,8 @@ renv.lock
 
 #editor exec
 micro
+
+# pipeline files
+pipeline/work
+pipeline/.nextflow*
+pipeline/output

@@ -5,6 +5,7 @@ import os
 from argparse import ArgumentParser
 import time
 import re
+import glob
 # big data
 import pandas as pd
 # to disable copy warning cuz i'm overwriting df in the bam function
@@ -27,6 +28,7 @@ def get_args(argv):
     required_args.add_argument('--sampleB_dir', dest='sampleBdir', required=True, help='output from xpore pipeline: the folder for the individual sample B')
     ### optional
     optional_args.add_argument('--verbose', dest='verbose', action='store_true', help='use to give more detailed output msgs')
+    optional_args.add_argument('--outfile', dest='outfile', help='filename to write xpore readnames to')
     ################
     parser._action_groups.append(optional_args)
     parser.set_defaults()
@@ -35,7 +37,7 @@ def get_args(argv):
 def get_xpipe_outpaths(dir):
     npevel_path = os.path.join(dir,"np","eventalign.txt")
     npsumm_path = os.path.join(dir,"np","summary.txt")
-    bam_path = os.path.join(dir,"bam","genome_index.bam")
+    bam_path = glob.glob(os.path.join(dir,"bam","*.bam"))[0]
     return npevel_path, npsumm_path, bam_path
 
 def eventalign_cols(path):
@@ -71,7 +73,7 @@ def attach_bam_data(rn, bamfile):
     save = pysam.set_verbosity(0)
     bam = pysam.AlignmentFile(bamfile, 'rb', check_sq=False)
     pysam.set_verbosity(save)
-    for r in tqdm(bam.fetch(until_eof=True)):
+    for r in bam.fetch(until_eof=True):
         if r.qname in unique_reads:
             # rows to touch
             ridx = np.where(rn['read_name'] == r.qname)[0]
@@ -84,32 +86,6 @@ def attach_bam_data(rn, bamfile):
             rn.loc[ridx,'move_end'] = kmer_starts+5
     return rn
 
-def xpore_filter(path):
-    col_list = ["id", "position", "kmer", "diff_mod_rate_A_vs_B", "mod_rate_A-rep1", "mod_rate_B-rep1", "pval_A_vs_B"]
-    xpore = pd.read_csv(path, delimiter=',', usecols=col_list)
-    ###############
-    ### filters ###
-    ###############
-    #kmer
-    filter1 = xpore['kmer'].str.contains(r'..A..')
-    # exteme modrates
-    mr_thresh_lower = 0.001
-    mr_thresh_upper = 0.99
-    filter2 = (xpore['mod_rate_A-rep1'] < mr_thresh_upper) & (xpore['mod_rate_A-rep1'] > mr_thresh_lower)
-    filter3 = (xpore['mod_rate_B-rep1'] < mr_thresh_upper) & (xpore['mod_rate_B-rep1'] > mr_thresh_lower)
-    # middling diffmod
-    dm_thresh = 0.6
-    filter4 = (xpore['diff_mod_rate_A_vs_B'] > dm_thresh) & (xpore['diff_mod_rate_A_vs_B'] < -dm_thresh)
-    # pval
-    pval_thresh = 0.01
-    filter5 = (xpore['pval_A_vs_B'] < pval_thresh)
-    ### apply filters ###
-    #NOTE: choose which ones you want here. 1 & 5 for B2 at moment
-    xporeFilter = (filter1 & filter5)
-    xpore = xpore[xporeFilter].reset_index()
-    xpore['index'] = xpore.index.values
-    return xpore
-
 def get_xpore_readnames(argv=sys.argv):
     st = time.time()
     args = get_args(argv)
@@ -117,10 +93,10 @@ def get_xpore_readnames(argv=sys.argv):
     tqdm.pandas(disable = not args.verbose)
     # filenames
     xpore_path = args.xporeFn
-    evalA, summA, bamA = get_xpipe_outpaths(args.sampleAdir)
-    evalB, summB, bamB = get_xpipe_outpaths(args.sampleBdir)
+    evalA, summA, bamA = get_xpipe_outpaths(os.path.dirname(args.sampleAdir))
+    evalB, summB, bamB = get_xpipe_outpaths(os.path.dirname(args.sampleBdir))
     # filtered xpore table
-    xpore = xpore_filter(xpore_path)
+    xpore = pd.read_csv(args.xporeFn)
     # filtered nanopolish eventaligns
     evA = eventalign_filter(eventalign_cols(evalA), xpore).compute()
     evB = eventalign_filter(eventalign_cols(evalB), xpore).compute()
@@ -141,7 +117,11 @@ def get_xpore_readnames(argv=sys.argv):
     rnB = column_renamer(rnB)
     print("that took so long, I've been waiting forever. {} whole seconds".format(time.time()-st))
     outDF = pd.concat([rnA, rnB])
-    return outDF
+    if args.outfile:
+        outDF.to_csv(args.outfile, index=False)
+    else:
+        return outDF
 
 if __name__=="__main__":
-    xpore_readnames = get_xpore_readnames()
+    get_xpore_readnames()
+    

@@ -13,6 +13,7 @@ library("tidyverse")
 library("ggpubr")
 library("lubridate")
 library("mclust")
+library("uwot")
 ```
 
 # env setup
@@ -66,25 +67,64 @@ kmer_table <- rbind(
     mutate(origin="mod"),
   reticulate::py$kmer_table_unmod %>% 
     mutate(origin="unmod")
-)
+) %>% 
+  # this filter is because AAAAA is a kmer which cannot be unambiguously determined to match sig vs seq
+  filter(kmer != "AAAAA")
 ```
 
 ```{r clustering}
-kmer_nclust_vals <- function(kmer_table, KMER) {
+kmerClustData <- list()
+for(KMER in unique(kmer_table$kmer)) {
   clusterdata <- kmer_table %>% 
     filter(kmer == KMER)
   # extract raw signal
-  signal_matrix <- as.data.frame(lapply(cbind(transpose(clusterdata$signal)), unlist), col.names = 1:50)
+  signal_matrix <- as.data.frame(lapply(cbind(transpose(clusterdata$signal)), unlist), col.names = 1:50) 
+  #%>% select(X31:X40)
+  
   # get BIC clustering
   mickey_ds <- Mclust(signal_matrix)
-  
-  return(length(unique(mickey_ds$classification)))
+
+  kmerClustData[[KMER]] <- mickey_ds
+  break
 }
 
-for(i in unique(kmer_table$kmer)) {
-  nclust <- kmer_nclust_vals(kmer_table, i)
-  print(paste(i, nclust))
-}
+plot(umap(signal_matrix))
+
+# plots to visualize the goddamn currents
+plotdata <- signal_matrix %>% 
+  mutate(origin = clusterdata$origin,
+         clusterID = as.factor(mickey_ds$classification)) %>% 
+  # normalize for read diff between samp
+  group_by(origin) %>% 
+  mutate(sampleSum = n()) %>% 
+  group_by(clusterID, origin) %>% 
+  summarise(normCount = n()/sampleSum) %>% 
+  distinct()
+
+p <- ggplot(plotdata, aes(x = origin, y = normCount, fill = clusterID)) +
+  geom_col(position = "dodge")
+
+plot(p)
+```
+
+```{r}
+# stupid idea, what if I correlate origin with clust ID?
+test <- kmer_table %>% filter(kmer == i)
+test$cluster_id <- as.factor(mclust$classification)
+
+plotdata <- test %>% 
+  group_by(cluster_id, origin) %>% 
+  count() %>% 
+  group_by(origin) %>% 
+  mutate(all_clust_total = sum(n)) %>% 
+  ungroup() %>% 
+  mutate(norm_count = n / all_clust_total)
+
+p <- ggplot(plotdata, aes(x = origin, y = norm_count , fill = origin)) + 
+  geom_col() + 
+  facet_grid(cols = vars(cluster_id))
+
+plot(p)
 ```
 
 ```{r}

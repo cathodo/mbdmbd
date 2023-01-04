@@ -1,0 +1,18 @@
+notes: Pairwise comparison without replicates with default parameter setting.
+
+data:
+    A:
+        rep1: {}
+    B:
+        rep1: {}    
+    
+out: .
+
+criteria: 
+    readcount_min: 10
+    readcount_max: 1000 
+
+method:
+    prefiltering:
+        method: t-test
+        threshold: 0.1
