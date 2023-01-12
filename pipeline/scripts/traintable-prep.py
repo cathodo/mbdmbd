@@ -94,11 +94,19 @@ def extract_bam_data(r, f5dir):
     # reshaping into stride-len bins
     stride_sig = sub_sig.reshape((sub_sig.size//stride_len, stride_len))
     # get indices of move table
+    base_ind = np.where(move_table)[0]
+    base_starts = base_ind[:-1]
+    base_ends = base_ind[1:]
+    # single stride index
     ss_ind = np.where([b==1 for b in move_table])[0]
-    sig = stride_sig[ss_ind]
+    sig_ss = stride_sig[ss_ind]
+    # multi stride index
+    sig_ms = [stride_sig[base_starts[i]:base_ends[i]] for i in range(len(base_starts))]
+    ### choose
+    sig = sig_ms
     #####################################################
     # output, return optional as needed
-    return seq, sig, start_time
+    return seq, sig, stride_len
 
 def make_kmer_table_from_bamfile(bamfile, f5dir, targetBase, klen, verbose):
     #########################
@@ -118,7 +126,7 @@ def make_kmer_table_from_bamfile(bamfile, f5dir, targetBase, klen, verbose):
         pysam.set_verbosity(save)
     for r in bam.fetch(until_eof=True):
         ## get bam data
-        seq_all, sig_all, st = extract_bam_data(r, f5dir)
+        seq_all, sig_all, sl = extract_bam_data(r, f5dir)
         ## handle bam data
         rn = "read_" + r.qname
         seq_idx = [targetBase == b for b in seq_all]
@@ -139,11 +147,11 @@ def make_kmer_table_from_bamfile(bamfile, f5dir, targetBase, klen, verbose):
             continue
         # make serieses
         big_list.append(pd.DataFrame([pd.Series(data={
-            'signal':sig[i].flatten(),
+            'signal':sig[i],
             'kmer':seq[i],
             'read_name':rn,
             'seqloc':str(iw[i]),
-            'start_time':st
+            'stride_length':sl
             }) for i in iw2]))
     ##############################
     kmer_table = pd.concat(big_list).reset_index()
@@ -163,7 +171,9 @@ def check_kmer(x, seq_all):
 def get_signal(x, sig_all):
     s = int(x['move_start'])
     e = int(x['move_end'])
-    return sig_all[s:e]
+    kmer = sig_all[s:e]
+    list_of_base_signal = [kmer[i].flatten() for i in range(len(kmer))]
+    return list_of_base_signal
 
 def build_kmer_table_from_coordinates(bamfile, f5dir, readinfo, verbose):
     #########################
@@ -201,7 +211,7 @@ def build_kmer_table_from_coordinates(bamfile, f5dir, readinfo, verbose):
             readhits.insert(len(readhits.columns), "signal", readhits.apply(lambda x: get_signal(x, sig_all), axis=1))
             # make serieses
             big_list.append(pd.DataFrame([pd.Series(data={
-                'signal':readhits.loc[i]['signal'].flatten(),
+                'signal':readhits.loc[i]['signal'],
                 'kmer':readhits.loc[i]['kmer'],
                 'read_name':rn,
                 'seqloc':str(readhits.loc[i]['move_start']),
@@ -250,7 +260,6 @@ def build_kmer_table(args):
 
 def get_kmer_table(argv=sys.argv):
     st = time.time()
-    ### handle args
     args = get_args(argv)
     # set bars verbosity
     tqdm.pandas(disable = not args.verbose)

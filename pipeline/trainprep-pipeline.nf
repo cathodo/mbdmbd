@@ -278,6 +278,7 @@ process xporeReadnames {
 }
 
 process xporeTraindata {
+	cache false
 	conda params.condaenv
     publishDir "./output/${samplename}/kmer_table"
     memory params.mem
